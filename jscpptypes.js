@@ -117,10 +117,8 @@ exports.CppObject = CppObject;
 
 function declare(lib, name, returnType) {
   let args = Array.slice(arguments, 3);
-  // XXX: jsapi isn't mangled on windows, but it won't necessary apply to all libs
-  // Remove that test and always mangle.
-  let symbol = Services.appinfo.OS == "WINNT" ? name : mangleFunction(name, args);
   let ctypesArgs = args.map(convertToCtypes);
+  let symbol = mangleFunction(name, args);
   try {
     return lib.declare.apply(
       lib,
@@ -129,6 +127,7 @@ function declare(lib, name, returnType) {
        convertToCtypes(returnType)].concat(ctypesArgs)
     );
   } catch(e) {
+    // XXX: C++ doesn't seem to be mangled on windows?
     try {
       return lib.declare.apply(
         lib,

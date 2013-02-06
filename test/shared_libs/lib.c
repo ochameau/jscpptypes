@@ -1,6 +1,12 @@
 #include <stdlib.h>
 
-long MyFunction(int *foo, int bar)
+#if defined(WINNT)
+#define MYLIB_API __declspec(dllexport)
+#else
+#define MYLIB_API
+#endif
+
+long MYLIB_API MyFunction(int *foo, int bar)
 {
   return *foo + bar;
 }
@@ -10,7 +16,7 @@ struct sMyStruct {
 };
 typedef struct sMyStruct MyClass;
 
-MyClass* GetObject(int attr)
+MyClass MYLIB_API *GetObject(int attr)
 {
   MyClass* obj;
   obj = (MyClass*) malloc(sizeof(MyClass));
@@ -18,7 +24,7 @@ MyClass* GetObject(int attr)
   return obj;
 }
 
-int GetObjectAttr(MyClass *obj)
+int MYLIB_API GetObjectAttr(MyClass *obj)
 {
   return obj->attr;
 }
