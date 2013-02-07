@@ -11,7 +11,6 @@ function getSharedLib(name) {
   let filename = ctypes.libraryName(
     name + (OS == "Linux" ? "-" + ARCH: "")
   );
-  console.log(">> "+filename);
   let url = module.uri.replace("test-jscpptypes.js", "shared_libs/" + filename);
   return createFromURL(url, filename);
 }
@@ -37,17 +36,16 @@ exports["test C library"] = function (assert) {
 exports["test C++ library"] = function (assert) {
   let path = getSharedLib("cpp");
   let lib = ctypes.open(path);
-  /*
   let MyFunction = declare(lib, "MyFunction", ctypes.long, ctypes.int.ptr, ctypes.int);
   let i = ctypes.int(1);
   let rv = MyFunction(i.address(), 2);
   assert.equal(rv, 3, "MyFunction works");
-*/
+
   let MyClass = CppObject("MyClass");
   let GetObject = declare(lib, "GetObject", MyClass, ctypes.int);
   let obj = GetObject(42);
   assert.ok(parseInt(obj), "GetObject doesn't return a null pointer");
-  let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.int, MyClass);
+  let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.long, MyClass);
   let attr = GetObjectAttr(obj);
   assert.equal(attr, 42, "GetObjectAttr works");
   
