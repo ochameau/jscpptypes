@@ -1,6 +1,10 @@
 const { Cu } = require("chrome");
 Cu.import("resource://gre/modules/ctypes.jsm");
 
+// Documentation about visual studio mangling
+// http://en.wikipedia.org/wiki/Visual_C%2B%2B_name_mangling
+// http://www.kegel.com/mangle.html
+
 // Return symbol for a given primary type
 function mangleBuiltinType(arg) {
   switch (arg) {
