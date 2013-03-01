@@ -1,5 +1,5 @@
 const { Cu, Cc, Ci } = require("chrome");
-const { CppClass, declare } = require("jscpptypes");
+const { CppClass, Const, declare } = require("jscpptypes");
 const { createFromURL } = require("sdk/test/tmp-file");
 
 Cu.import("resource://gre/modules/ctypes.jsm");
@@ -58,6 +58,15 @@ exports["test C++ library"] = function (assert) {
   let MyNSFunction = declare(lib, "MyNS::MySubNS::MyNSFunction", ctypes.long, ctypes.long);
   let rv = MyNSFunction(1);
   assert.equal(rv, 2, "MyNSFunction works");
+
+  let Substitution1 = declare(lib, "Substitution1", ctypes.int, MyClass.ptr, MyClass.ptr, MyClass);
+  let Substitution2 = declare(lib, "Substitution2", ctypes.int, MyClass, MyClass.ptr, MyClass);
+  let Substitution3 = declare(lib, "MyNS::Substitution3", ctypes.int, MyClass, MyClass);
+  let MyClass2 = CppClass("MyNS::MyClass2");
+  let Substitution4 = declare(lib, "MyNS::Substitution4", ctypes.int, MyClass2);
+  let constCharPtr = Const(ctypes.char, true);
+  let Substitution5 = declare(lib, "Substitution5", ctypes.int, constCharPtr, ctypes.char, ctypes.char.ptr, constCharPtr);
+
   lib.close();
 }
 

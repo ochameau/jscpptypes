@@ -56,12 +56,13 @@ function mangleBuiltinType(arg) {
 // Returns symbol for each argument of a function: <bare-function-type>
 function mangleArgument(substitutes, arg) {
   let symbol = "";
+  let saveSubstitute = false;
 
   // For non built-in types, search for previous substitute
   if (arg instanceof ctypes.PointerType ||
       arg instanceof ctypes.FunctionType ||
-      arg.isClassObject ||
-      arg.isConst) {
+      arg.isClassObject && arg.targetType ||
+      arg.isConst && arg.ptr) {
     // Search for previous argument with same type
     let sameArgIndex = substitutes.indexOf(arg);
     // if a previous argument used the same struct or class name,
@@ -72,30 +73,28 @@ function mangleArgument(substitutes, arg) {
       else
         return "S" + (sameArgIndex - 1) + "_";
     } else {
-      substitutes.push(arg);
+      saveSubstitute = true;
     }
   }
 
   if (arg.isConst) {
-    arg = arg.ctype;
-    if (arg.ptr) {
+    if (arg.ctype.ptr) {
       symbol += "P";
-      arg = arg.targetType;
     }
     symbol += "K";
-  }
-  
-  if (arg.isEnum) {
-    return mangleBuiltinType(arg.ctype);
-  }
-
-  // Consider PointerType object as 'Pointer-to'
-  while (arg instanceof ctypes.PointerType ||
-     (arg.isClassObject && arg.targetType)) {
-    return "P" + mangleArgument(substitutes, arg.targetType);
-  }
-  
-  if (arg instanceof ctypes.FunctionType) {
+    symbol += mangleArgument(substitutes, arg.ctype.targetType || arg.ctype);
+    // Add an entry for the const symbol in substitutes
+    // otherwise 'S_' indexes are wrong
+    // TODO: add real subtitutes support for non-pointer const
+    substitutes.push({});
+  } else if (arg.isEnum) {
+    symbol += mangleBuiltinType(arg.ctype);
+  } else if (arg instanceof ctypes.PointerType ||
+         (arg.isClassObject && arg.targetType)) {
+    // Consider PointerType object as 'Pointer-to'
+    symbol += "P" 
+    symbol += mangleArgument(substitutes, arg.targetType);
+  } else  if (arg instanceof ctypes.FunctionType) {
     symbol += "F" +
               mangleArgument(substitutes, arg.returnType) +
               arg.argTypes.map(
@@ -103,9 +102,13 @@ function mangleArgument(substitutes, arg) {
               ).join("") +
               "E";
   } else if (arg.isClassObject || arg instanceof ctypes.StructType) {
-    symbol += mangleName(arg.name);
+    symbol += mangleName(substitutes, arg.name, true);
   } else {
     symbol += mangleBuiltinType(arg);
+  }
+
+  if (saveSubstitute) {
+    substitutes.push(arg);
   }
 
   return symbol;
@@ -113,27 +116,41 @@ function mangleArgument(substitutes, arg) {
 
 // Returns symbol for a given name: <name>
 // XXX: missing various cases like template names and ::std::
-function mangleName(name) {
+function mangleName(substitutes, name, classOrStructName) {
   let symbol = "";
   let l = name.split("::");
-  if (l.length == 1) {
-    // <unscoped-name> -> <source-name>
-    symbol += name.length + name;
-  } else {
-    // <nested-name>
+
+  // <nested-name>
+  if (l.length > 1)
     symbol += "N";
-    symbol += l.map(function (part) {
-      return part.length + part;
-    }).join("");
+
+  symbol += l.map(function (part) {
+    // Search for previous argument with same type
+    let sameArgIndex = substitutes.indexOf(part);
+    // if a previous argument used the same struct or class name,
+    // just use argument index, beginning from 0
+    if (sameArgIndex != -1) {
+      if (sameArgIndex == 0)
+        return "S_";
+      else
+        return "S" + (sameArgIndex - 1) + "_";
+    } else if (part != l[l.length-1] || classOrStructName) {
+      // We ignore the last part of function names
+      substitutes.push(part);
+    }
+    return part.length + part;
+  }).join("");
+
+  if (l.length > 1)
     symbol += "E";
-  }
+
   return symbol;
 }
 
 // Returns symbol for a given function: <mangled-name>
 function mangleFunction(funName, returnType, args) {
-  let symbol = "_Z" + mangleName(funName);
   let substitutes = [];
+  let symbol = "_Z" + mangleName(substitutes, funName, false);
   for (let i = 0; i < args.length; i++) {
     symbol += mangleArgument(substitutes, args[i]);
   }

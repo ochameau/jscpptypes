@@ -17,20 +17,26 @@ let mangler = OS == "WINNT" ? require("winnt-mangler")
 function CppClass(name, forcePtr) {
   if (!name)
     throw new Error("CppClass `name` argument is mandatory");
+  let cache = new WeakMap();
   let cls = {
     isClassObject: true,
     name: name,
     ctype: ctypes.voidptr_t.size == 8 ? ctypes.uint64_t : ctypes.uint32_t,
     get ptr() {
-      let ptr = Object.create(this);
-      // Only start using .ptr when using Class.ptr.ptr,
-      // And force ptr type for reference passing.
-      if (this != cls || forcePtr) {
-        ptr.ctype = ptr.ctype.ptr;
+      let ptr = cache.get(this);
+      if (!ptr) {
+        ptr = Object.create(this);
+        // Only start using .ptr when using Class.ptr.ptr,
+        // And force ptr type for reference passing.
+        if (this != cls || forcePtr) {
+          ptr.ctype = ptr.ctype.ptr;
+        }
+        ptr.targetType = this;
+        cache.set(this, ptr);
       }
-      ptr.targetType = this;
       return ptr;
-    }
+    },
+    _ptrCache: null
   };
   return cls;
 }
