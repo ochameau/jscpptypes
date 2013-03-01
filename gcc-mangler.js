@@ -6,9 +6,15 @@ Cu.import("resource://gre/modules/ctypes.jsm");
 
 // Return symbol for a given primary type: <builtin-type>
 function mangleBuiltinType(arg) {
+  if (arg == ctypes.size_t) {
+    if (ctypes.size_t.size == 8)
+      arg = ctypes.unsigned_long;
+    else
+      arg = ctypes.unsigned_int;
+  }
   // <builtin-type>
   switch (arg) {
-    case ctypes.void:
+    case ctypes.void_t:
       return 'v';
     // XXX: wchar_t -> w ?
     case ctypes.bool:
@@ -48,18 +54,56 @@ function mangleBuiltinType(arg) {
 }
 
 // Returns symbol for each argument of a function: <bare-function-type>
-function mangleArgument(arg) {
+function mangleArgument(substitutes, arg) {
   let symbol = "";
 
-  // Consider PointerType object as 'Pointer-to'
-  if (arg instanceof ctypes.PointerType) {
-    symbol += "P";
-    arg = arg.targetType;
+  // For non built-in types, search for previous substitute
+  if (arg instanceof ctypes.PointerType ||
+      arg instanceof ctypes.FunctionType ||
+      arg.isClassObject ||
+      arg.isConst) {
+    // Search for previous argument with same type
+    let sameArgIndex = substitutes.indexOf(arg);
+    // if a previous argument used the same struct or class name,
+    // just use argument index, beginning from 0
+    if (sameArgIndex != -1) {
+      if (sameArgIndex == 0)
+        return "S_";
+      else
+        return "S" + (sameArgIndex - 1) + "_";
+    } else {
+      substitutes.push(arg);
+    }
   }
 
-  if (arg.isCppClass) {
-    // Handle C++ definitions
-    symbol += arg.symbol;
+  if (arg.isConst) {
+    arg = arg.ctype;
+    if (arg.ptr) {
+      symbol += "P";
+      arg = arg.targetType;
+    }
+    symbol += "K";
+  }
+  
+  if (arg.isEnum) {
+    return mangleBuiltinType(arg.ctype);
+  }
+
+  // Consider PointerType object as 'Pointer-to'
+  while (arg instanceof ctypes.PointerType ||
+     (arg.isClassObject && arg.targetType)) {
+    return "P" + mangleArgument(substitutes, arg.targetType);
+  }
+  
+  if (arg instanceof ctypes.FunctionType) {
+    symbol += "F" +
+              mangleArgument(substitutes, arg.returnType) +
+              arg.argTypes.map(
+                mangleArgument.bind(null, substitutes)
+              ).join("") +
+              "E";
+  } else if (arg.isClassObject || arg instanceof ctypes.StructType) {
+    symbol += mangleName(arg.name);
   } else {
     symbol += mangleBuiltinType(arg);
   }
@@ -88,15 +132,18 @@ function mangleName(name) {
 
 // Returns symbol for a given function: <mangled-name>
 function mangleFunction(funName, returnType, args) {
-  return "_Z" + mangleName(funName) +
-    args.map(mangleArgument).join('');
+  let symbol = "_Z" + mangleName(funName);
+  let substitutes = [];
+  for (let i = 0; i < args.length; i++) {
+    symbol += mangleArgument(substitutes, args[i]);
+  }
+  return symbol;
+  
 }
 exports.mangleFunction = mangleFunction;
 
-function mangleClass(name, noPtr) {
-  let symbol = "";
-  if (!noPtr)
-    symbol += "P";
-  return symbol + mangleName(name);
+function manglePointer(symbol) {
+  return "P" + symbol;
 }
-exports.mangleClass = mangleClass;
+exports.manglePointer = manglePointer;
+

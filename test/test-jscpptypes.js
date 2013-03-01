@@ -1,5 +1,5 @@
 const { Cu, Cc, Ci } = require("chrome");
-const { CppObject, declare } = require("jscpptypes");
+const { CppClass, declare } = require("jscpptypes");
 const { createFromURL } = require("sdk/test/tmp-file");
 
 Cu.import("resource://gre/modules/ctypes.jsm");
@@ -15,6 +15,11 @@ function getSharedLib(name) {
   return createFromURL(url, filename);
 }
 
+function isNullPointer(ptr) {
+  return !parseInt(ptr);
+  return parseInt(ctypes.cast(ptr, ctypes.uintptr_t).value) == 0;
+}
+
 exports["test C library"] = function (assert) {
   let path = getSharedLib("c");
   let lib = ctypes.open(path);
@@ -23,16 +28,17 @@ exports["test C library"] = function (assert) {
   let rv = MyFunction(i.address(), 2);
   assert.equal(rv, 3, "MyFunction works");
 
-  let MyClass = CppObject("MyClass");
-  let GetObject = declare(lib, "GetObject", MyClass, ctypes.int);
+  let MyClass = CppClass("MyClass");
+  let GetObject = declare(lib, "GetObject", MyClass.ptr, ctypes.int);
   let obj = GetObject(42);
-  assert.ok(parseInt(obj), "GetObject doesn't return a null pointer");
-  let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.int, MyClass);
+  console.log(obj);
+  assert.ok(!isNullPointer(obj), "GetObject doesn't return a null pointer");
+  let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.int, MyClass.ptr);
   let attr = GetObjectAttr(obj);
   assert.equal(attr, 42, "GetObjectAttr works");
   lib.close();
 }
-  
+
 exports["test C++ library"] = function (assert) {
   let path = getSharedLib("cpp");
   let lib = ctypes.open(path);
@@ -41,11 +47,11 @@ exports["test C++ library"] = function (assert) {
   let rv = MyFunction(i.address(), 2);
   assert.equal(rv, 3, "MyFunction works");
 
-  let MyClass = CppObject("MyClass");
-  let GetObject = declare(lib, "GetObject", MyClass, ctypes.int);
+  let MyClass = CppClass("MyClass");
+  let GetObject = declare(lib, "GetObject", MyClass.ptr, ctypes.int);
   let obj = GetObject(42);
-  assert.ok(parseInt(obj), "GetObject doesn't return a null pointer");
-  let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.long, MyClass);
+  assert.ok(!isNullPointer(obj), "GetObject doesn't return a null pointer");
+  let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.long, MyClass.ptr);
   let attr = GetObjectAttr(obj);
   assert.equal(attr, 42, "GetObjectAttr works");
   
