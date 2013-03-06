@@ -10,32 +10,32 @@ let mangler = OS == "WINNT" ? require("winnt-mangler")
 function CppClass(name) {
   if (!name)
     throw new Error("CppClass `name` argument is mandatory");
-  let cache = new WeakMap();
-  let cls = {
+  return {
     isClassObject: true,
     name: name,
     ctype: ctypes.uintptr_t,
-
+    create: function () {
+      if (this.ctype == ctypes.uintptr_t)
+        throw new Error("CppClass.create only works for class pointers");
+      return this.ctype(0);
+    },
     get ptr() {
-      // Keep a cache in order to return the same object
-      // each time we access ptr attribute
-      let ptr = cache.get(this);
-      if (!ptr) {
-        ptr = Object.create(this);
-        ptr.ctype = ptr.ctype.ptr;
-        ptr.targetType = this;
-        cache.set(this, ptr);
-      }
+      // Create ptr dynamically and keep a cache in
+      // order to return the same object each time
+      // we access ptr attribute
+      delete this.ptr;
+      let ptr = CppClass(this.name);
+      ptr.ctype = this.ctype.ptr;
+      ptr.targetType = this;
+      this.ptr = ptr;
       return ptr;
     },
-
     // Returns a pointer to type object at given address
     // the address should be an hexadecimal string, like 0x0a3927ff...
     fromAddress: function (addr) {
       return ctypes.cast(ctypes.uintptr_t(addr), this.ctype);
     }
   };
-  return cls;
 }
 exports.CppClass = CppClass;
 

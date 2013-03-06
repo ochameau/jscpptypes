@@ -61,9 +61,8 @@ exports["test C++ library"] = function (assert) {
 
   // Check usage of reference
   let GetObjectByRef = declare(lib, "GetObjectByRef", ctypes.void_t, MyClass.ptr.ptr, ctypes.int);
-  let obj = MyClass.ptr.ctype(0);
+  let obj = MyClass.ptr.create();
   GetObjectByRef(obj.address(), 43);
-  console.log(obj);
   assert.ok(!obj.isNull(), "GetObjectByRef set the reference to a non-null object");
   let attr = GetObjectAttr(obj);
   assert.equal(attr, 43, "GetObjectAttr works on the reference");
