@@ -21,6 +21,12 @@ MyClass MYLIB_API *GetObject(int attr)
   return obj;
 }
 
+void MYLIB_API *GetObjectByRef(MyClass **obj, int attr)
+{
+  *obj = new MyClass();
+  (*obj)->attr = attr;
+}
+
 long MYLIB_API GetObjectAttr(MyClass *obj)
 {
   return obj->attr;

@@ -4,39 +4,36 @@ const { OS } = Cc["@mozilla.org/xre/app-info;1"].getService(Ci.nsIXULRuntime);
 Cu.import("resource://gre/modules/ctypes.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 
-function convertToCtypes(arg) {
-  if (arg.isClassObject || arg.isConst || arg.isEnum) {
-    return arg.ctype;
-  }
-  return arg;
-}
-
 let mangler = OS == "WINNT" ? require("winnt-mangler") 
                             : require("gcc-mangler");
 
-function CppClass(name, forcePtr) {
+function CppClass(name) {
   if (!name)
     throw new Error("CppClass `name` argument is mandatory");
   let cache = new WeakMap();
   let cls = {
     isClassObject: true,
     name: name,
-    ctype: ctypes.voidptr_t.size == 8 ? ctypes.uint64_t : ctypes.uint32_t,
+    ctype: ctypes.uintptr_t,
+
     get ptr() {
+      // Keep a cache in order to return the same object
+      // each time we access ptr attribute
       let ptr = cache.get(this);
       if (!ptr) {
         ptr = Object.create(this);
-        // Only start using .ptr when using Class.ptr.ptr,
-        // And force ptr type for reference passing.
-        if (this != cls || forcePtr) {
-          ptr.ctype = ptr.ctype.ptr;
-        }
+        ptr.ctype = ptr.ctype.ptr;
         ptr.targetType = this;
         cache.set(this, ptr);
       }
       return ptr;
     },
-    _ptrCache: null
+
+    // Returns a pointer to type object at given address
+    // the address should be an hexadecimal string, like 0x0a3927ff...
+    fromAddress: function (addr) {
+      return ctypes.cast(ctypes.uintptr_t(addr), this.ctype);
+    }
   };
   return cls;
 }
@@ -59,6 +56,13 @@ function Enum(name) {
   };
 }
 exports.Enum = Enum;
+
+function convertToCtypes(arg) {
+  if (arg.isClassObject || arg.isConst || arg.isEnum) {
+    return arg.ctype;
+  }
+  return arg;
+}
 
 function declare(lib, name, returnType) {
   let args = Array.slice(arguments, 3);
@@ -93,3 +97,4 @@ function declare(lib, name, returnType) {
   }
 }
 exports.declare = declare;
+

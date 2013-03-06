@@ -15,11 +15,6 @@ function getSharedLib(name) {
   return createFromURL(url, filename);
 }
 
-function isNullPointer(ptr) {
-  return !parseInt(ptr);
-  return parseInt(ctypes.cast(ptr, ctypes.uintptr_t).value) == 0;
-}
-
 exports["test C library"] = function (assert) {
   let path = getSharedLib("c");
   let lib = ctypes.open(path);
@@ -31,8 +26,7 @@ exports["test C library"] = function (assert) {
   let MyClass = CppClass("MyClass");
   let GetObject = declare(lib, "GetObject", MyClass.ptr, ctypes.int);
   let obj = GetObject(42);
-  console.log(obj);
-  assert.ok(!isNullPointer(obj), "GetObject doesn't return a null pointer");
+  assert.ok(!obj.isNull(), "GetObject doesn't return a null pointer");
   let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.int, MyClass.ptr);
   let attr = GetObjectAttr(obj);
   assert.equal(attr, 42, "GetObjectAttr works");
@@ -42,23 +36,43 @@ exports["test C library"] = function (assert) {
 exports["test C++ library"] = function (assert) {
   let path = getSharedLib("cpp");
   let lib = ctypes.open(path);
+
+  // Check simple function with primitive types
   let MyFunction = declare(lib, "MyFunction", ctypes.long, ctypes.int.ptr, ctypes.int);
   let i = ctypes.int(1);
   let rv = MyFunction(i.address(), 2);
   assert.equal(rv, 3, "MyFunction works");
 
+  // Check simple Class pointer usage
   let MyClass = CppClass("MyClass");
   let GetObject = declare(lib, "GetObject", MyClass.ptr, ctypes.int);
   let obj = GetObject(42);
-  assert.ok(!isNullPointer(obj), "GetObject doesn't return a null pointer");
+  assert.ok(!obj.isNull(), "GetObject doesn't return a null pointer");
   let GetObjectAttr = declare(lib, "GetObjectAttr", ctypes.long, MyClass.ptr);
   let attr = GetObjectAttr(obj);
   assert.equal(attr, 42, "GetObjectAttr works");
+
+  // Check CppClass.fromAddress()
+  // Get the hex string for the object address
+  let addr = String(obj).match(/0x[\dA-Fa-f]+/)[0];
+  let p = MyClass.ptr.fromAddress(addr);
+  let attr = GetObjectAttr(p);
+  assert.equal(attr, 42, "GetObjectAttr works on the pointer from MyClass.fromAddress");
+
+  // Check usage of reference
+  let GetObjectByRef = declare(lib, "GetObjectByRef", ctypes.void_t, MyClass.ptr.ptr, ctypes.int);
+  let obj = MyClass.ptr.ctype(0);
+  GetObjectByRef(obj.address(), 43);
+  console.log(obj);
+  assert.ok(!obj.isNull(), "GetObjectByRef set the reference to a non-null object");
+  let attr = GetObjectAttr(obj);
+  assert.equal(attr, 43, "GetObjectAttr works on the reference");
   
   let MyNSFunction = declare(lib, "MyNS::MySubNS::MyNSFunction", ctypes.long, ctypes.long);
   let rv = MyNSFunction(1);
   assert.equal(rv, 2, "MyNSFunction works");
 
+  // Check compression mangling...
   let Substitution1 = declare(lib, "Substitution1", ctypes.int, MyClass.ptr, MyClass.ptr, MyClass);
   let Substitution2 = declare(lib, "Substitution2", ctypes.int, MyClass, MyClass.ptr, MyClass);
   let Substitution3 = declare(lib, "MyNS::Substitution3", ctypes.int, MyClass, MyClass);
