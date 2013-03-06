@@ -48,54 +48,49 @@ function mangleBuiltinType(arg) {
 }
 
 // Returns symbol for each argument of a function: FunctionTypeCode
-function mangleArgument(args, arg, position) {
+function mangleArgument(substitutes, arg, doNotSubstitute) {
   let symbol = "";
+
+  let saveSubstitute = false;
+  if (!doNotSubstitute && (arg instanceof ctypes.PointerType ||
+      arg instanceof ctypes.FunctionType ||
+      arg.isClassObject ||
+      arg.isConst)) {
+    // Search for previous argument with same type
+    let sameArgIndex = substitutes.indexOf(arg);
+    // if a previous argument used the same struct or class name,
+    // just use argument index, beginning from 0
+    if (sameArgIndex != -1) {
+      return sameArgIndex;
+    } else {
+      saveSubstitute = true;
+      substitutes.push(arg);
+    }
+  }
 
   if (arg.isConst) {
     arg = arg.ctype;
     if (arg.ptr) {
       symbol += "PB";
-      arg = arg.targetType;
+      symbol += mangleArgument(substitutes, arg.targetType);
     } else {
       //XXX: need to verify the non-pointer scenario:
       symbol += "B";
+      symbol += mangleArgument(substitutes, arg);
     }
-  }
-
-  if (arg.isEnum) {
-    return "?AW4" + mangleName(arg.name) + "@";
-  }
-
-  // Consider PointerType object as 'Pointer-to'
-  while (arg instanceof ctypes.PointerType ||
-         (arg.isClassObject && arg.targetType)) {
+  } else if (arg.isEnum) {
+    symbol += "?AW4" + mangleName(substitutes, arg.name, true) + "@";
+  } else if (arg instanceof ctypes.PointerType ||
+             (arg.isClassObject && arg.targetType)) {
     //XXX: Pointer can have a different CV-class modifier different than
     //     none = 'A'
     symbol += "PA";
-    arg = arg.targetType;
-  }
-
-  if (arg.isClassObject || arg instanceof ctypes.StructType) {
-    // Search for previous argument with same name
-    let sameNameArg = null;
-    for (let i = 0; i < position; i++) {
-      let a = args[i];      
-      if (a.name == arg.name) {
-        sameNameArg = i;
-        break;
-      }
-    }
-    // if a previous argument used the same struct or class name,
-    // just use argument index, beginning from 1
-    let name;
-    if (sameNameArg != null)
-      name = sameNameArg + 1;
-    else
-      name = mangleName(arg.name);
+    symbol += mangleArgument(substitutes, arg.targetType, (arg.isClassObject && arg.targetType));
+  } else if (arg.isClassObject || arg instanceof ctypes.StructType) {
+    let name = mangleName(substitutes, arg.name, true);
 
     if (arg.isClassObject) {
       // Handle C++ definitions
-      //XXX-TODO: mangle nested name
       symbol += "V" + name + "@";
     } else if (arg instanceof ctypes.StructType) {
       symbol += "U" + name + "@";
@@ -104,16 +99,36 @@ function mangleArgument(args, arg, position) {
     symbol += mangleBuiltinType(arg);
   }
 
+  if (saveSubstitute)
+    ;//substitutes.push(arg);
+
   return symbol;
 }
 
 // Returns symbol for a given name: BasicName Qualification '@'
 // XXX: missing operator case
-function mangleName(name) {
+function mangleName(substitutes, name, classOrStructName) {
   // We put each name in reserve order seperated by '@' and with an extra
   // '@' at the end.
   let l = name.split("::");
   l.reverse();
+  l = l.map(function (part) {
+    // Search for previous argument with same type
+    let sameArgIndex = substitutes.indexOf(part);
+    console.log(part+" -> "+sameArgIndex+" ---- "+substitutes.join(', '));
+    // if a previous argument used the same struct or class name,
+    // just use argument index, beginning from 0
+    if (sameArgIndex != -1) {
+      return sameArgIndex;
+    } else if (part != l[0] || classOrStructName) {
+      // We ignore the last part of function names
+      substitutes.push(part);
+    }
+    return part;
+  })
+  //XXX: not sure about this rule:
+  if (l.length == 1 && parseInt(l[0])>=0)
+    return l;
   return l.join("@") + "@";
 }
 
@@ -122,10 +137,16 @@ function mangleFunction(funName, returnType, args) {
   // XXX: It looks like function are always:
   //      UnqualifiedTypeCode -> 'Y',
   //      StorageClass: (Normal Storage) -> 'A',
-  let symbol = "?" + mangleName(funName) + "@" + "Y" + "A";
+  let substitutes = [];
+  let o = substitutes.push;
+  substitutes.push = function (a) {
+    console.log(" + "+a + "/"+ a.name);
+    o.call(substitutes, a);
+  };
+  let symbol = "?" + mangleName([], funName, false) + "@" + "Y" + "A";
   let allTypes = [returnType].concat(args);
   for (let i = 0; i < allTypes.length; i++) {
-    symbol += mangleArgument(allTypes, allTypes[i], i);
+    symbol += mangleArgument(substitutes, allTypes[i]);
   }
   
   return symbol + "@Z";
