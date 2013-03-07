@@ -7,16 +7,25 @@ Cu.import("resource://gre/modules/Services.jsm");
 let mangler = OS == "WINNT" ? require("winnt-mangler") 
                             : require("gcc-mangler");
 
+// For some reason (ctype.uintptr_t.ptr has wrong size??),
+// we can't use ptr for class type and use uint64_t instead.
+// But we expect all class intances to be pointer and have isNull method...
+if (OS == "WINNT") {
+  ctypes.uint64_t.prototype.isNull = function () {
+    parseInt(this);
+  }
+}
+
 function CppClass(name) {
   if (!name)
     throw new Error("CppClass `name` argument is mandatory");
   return {
     isClassObject: true,
     name: name,
-    ctype: ctypes.uintptr_t,
+    ctype: OS == "WINNT" ? ctypes.uint64_t : ctypes.uintptr_t.ptr,
     create: function () {
-      if (this.ctype == ctypes.uintptr_t)
-        throw new Error("CppClass.create only works for class pointers");
+      //if (this.ctype == ctypes.uintptr_t)
+      //  throw new Error("CppClass.create only works for class pointers");
       return this.ctype(0);
     },
     get ptr() {
